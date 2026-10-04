@@ -996,3 +996,18 @@ test('active account window choices exclude managed-only Codex windows', () => {
   assert.deepEqual(choices.map((option) => option.kind), ['session', 'weekly']);
   assert.ok(choices.every((option) => option.selection.providerRecord.accountKey === 'active'));
 });
+
+
+test('task rates use task data and preserve the original live rate and idle value', () => {
+  const live = { ...createTrayLayoutItem('liveTokenRate'), id: 'live', rateScope: 'device' };
+  const task = { ...live, id: 'task', rateMode: 'task', rateClient: 'codex' };
+  const layout = { version: 3, items: [live, task] };
+  assert.equal(normalizeTrayLayout(layout).items[1].rateMode, 'task');
+  const options = { liveTokenRates: { device: { speed: 100, idle: true } }, taskTokenRates: { clients: { codex: { speed: 24.5, idle: false } } }, liveTokenRateFormatter: String };
+  const items = resolveTrayLayout(layout, {}, options).items;
+  assert.equal(items[0].text, '100 tok/s');
+  assert.equal(items[0].available, false);
+  assert.equal(items[1].text, '24.5 tok/s');
+  assert.equal(items[1].available, true);
+  assert.equal(resolveTrayLayout(layout, {}, { ...options, taskTokenRates: {} }).items[1].text, '— tok/s');
+});
