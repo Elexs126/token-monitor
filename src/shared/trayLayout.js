@@ -53,7 +53,7 @@
   const USAGE_SCOPES = new Set(['all', 'recent']);
   const PERIODS = new Set(['today', 'month', 'allTime']);
   const WINDOW_PRESETS = new Set(['primary', 'secondary', 'session', 'daily', 'weekly', 'billing']);
-  const LIVE_RATE_MODES = new Set(['speed', 'burn']);
+  const LIVE_RATE_MODES = new Set(['speed', 'burn', 'task']);
   const LIVE_RATE_SCOPES = new Set(['all', 'device']);
 
   function clean(value, max = 160) {
@@ -142,6 +142,16 @@
     return LIVE_RATE_MODES.has(mode) ? mode : 'speed';
   }
 
+  function normalizeLiveRateSelection(input) {
+    const mode = normalizeLiveRateMode(input.rateMode);
+    const client = mode === 'task' && ['codex', 'antigravity'].includes(input.rateClient) ? input.rateClient : '';
+    return {
+      rateMode: mode,
+      rateScope: client || mode === 'task' ? 'device' : normalizeLiveRateScope(input.rateScope),
+      ...(client ? { rateClient: client } : {})
+    };
+  }
+
   function normalizeLiveRateScope(value) {
     const scope = clean(value, 24);
     return LIVE_RATE_SCOPES.has(scope) ? scope : 'all';
@@ -190,8 +200,7 @@
     if (normalized.metric === 'liveTokenRate') {
       return {
         metric: 'liveTokenRate',
-        rateMode: normalizeLiveRateMode(row.rateMode),
-        rateScope: normalizeLiveRateScope(row.rateScope)
+        ...normalizeLiveRateSelection(row)
       };
     }
     if (normalized.metric === 'cost') {
@@ -500,8 +509,7 @@
         type,
         style: 'liveTokenRate',
         metric: 'liveTokenRate',
-        rateMode: normalizeLiveRateMode(input.rateMode),
-        rateScope: normalizeLiveRateScope(input.rateScope),
+        ...normalizeLiveRateSelection(input),
         fontStyle: normalizeFontStyle(input.fontStyle)
       };
     }
@@ -940,11 +948,17 @@
   function resolveTextItem(item, stats, options, recentProvider = null) {
     if (item.metric === 'liveTokenRate') {
       const scope = normalizeLiveRateScope(item.rateScope);
-      const sample = options.liveTokenRates?.[scope] || null;
       const mode = normalizeLiveRateMode(item.rateMode);
-      const rawRate = sample ? sample[mode] : null;
+      const rates = mode === 'task' ? options.taskTokenRates : options.liveTokenRates;
+      const sample = item.rateClient
+        ? rates?.clients?.[item.rateClient] || null
+        : rates?.[scope] || null;
+      const rawRate = sample && (mode !== 'task' || sample.idle !== true) ? sample[mode === 'task' ? 'speed' : mode] : null;
       const rate = rawRate === null || rawRate === undefined ? null : finite(rawRate);
-      const text = `${rate === null ? '—' : formatLiveRate(rate, options)} ${mode === 'burn' ? 'TPM' : 'tok/s'}`;
+      const value = rate === null ? '—' : mode === 'task'
+        ? Number(rate).toLocaleString(options.locale, { maximumFractionDigits: 1 })
+        : formatLiveRate(rate, options);
+      const text = `${value} ${mode === 'burn' ? 'TPM' : 'tok/s'}`;
       return {
         ...item,
         available: Boolean(sample && sample.idle !== true),
