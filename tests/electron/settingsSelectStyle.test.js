@@ -9,7 +9,7 @@ const rendererDir = path.join(__dirname, '..', '..', 'src', 'electron', 'rendere
 const app = fs.readFileSync(path.join(rendererDir, 'app.js'), 'utf8');
 const css = fs.readFileSync(path.join(rendererDir, 'styles.css'), 'utf8');
 
-test('Windows settings selects keep the glass control and readable popup colors', () => {
+test('Linux and Windows selects keep the glass control and readable popup colors', () => {
   assert.match(
     app,
     /document\.documentElement\.classList\.toggle\('is-windows', isWindows\)/,
@@ -27,7 +27,7 @@ test('Windows settings selects keep the glass control and readable popup colors'
   );
   assert.match(
     css,
-    /html\.is-windows \.settings-panel select option\s*\{[^}]*background-color:\s*rgb\(var\(--panel-rgb\)\);[^}]*color:\s*var\(--text\);/s,
-    'Windows popup options should have an explicit readable theme pair'
+    /select option,\s*select optgroup\s*\{[^}]*background-color:\s*rgb\(var\(--panel-rgb\)\);[^}]*color:\s*var\(--text\);/s,
+    'Native popup options on Linux and Windows should have an explicit readable theme pair'
   );
 });
