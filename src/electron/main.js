@@ -264,6 +264,7 @@ const { deviceHistoryRevision, historyPreview, historyRevision } = require('../s
 const { completeHistorySource, resolveCompleteHistory, resolveCompleteHistoryWithDevices } = require('./historySource');
 const { fixedPeriodHistoryMeta } = require('./fixedPeriodHistory');
 const { readSessionDetailForPlatform } = require('../shared/sessionDetailResolver');
+const { readTaskSpeedStats } = require('./taskSpeedHost');
 const { startDiscordRpc, stopDiscordRpc, updateDiscordRpc } = require('./discordRpc');
 const {
   commitMacWidgetSnapshot,
@@ -361,6 +362,7 @@ const {
   windowBehaviorSelection
 } = require('./windowBehavior');
 const { createTaskbarZOrderKeeper, taskbarZOrderEnabled } = require('./windowsTaskbarZOrder');
+const { resizedWindowBounds } = require('./windowResize');
 const { subscribeForegroundChange } = require('./windowsForegroundHook');
 const {
   normalizeWindowToggleShortcut,
@@ -475,7 +477,7 @@ const SMART_COLLECTION_INTERVAL_MS = 10 * 60 * 1000;
 const DEFAULT_COLLECTION_INTERVAL_MS = 5 * 60 * 1000;
 const HUB_DEFAULT_PORT = 17321;
 const KNOWN_CLIENT_LIST = KNOWN_CLIENTS.split(',').map((id) => ({ id }));
-const DEFAULT_VIEW_LIST = ['home', 'limits', 'tool', 'model', 'project', 'session', 'device', 'trends', 'status'].map((id) => ({ id }));
+const DEFAULT_VIEW_LIST = ['home', 'limits', 'tool', 'model', 'project', 'session', 'speed', 'device', 'trends', 'status'].map((id) => ({ id }));
 const DEFAULT_HOME_MODULE_LIST = ['limits', 'tool', 'model', 'session', 'device', 'trends'].map((id) => ({ id }));
 const TRAY_OPEN_VIEW_IDS = new Set(['home', 'project', 'session', 'limits', 'trends', 'status']);
 
@@ -7641,6 +7643,11 @@ app.whenReady().then(() => {
     if (result.canceled || !result.filePaths[0]) return { ok: false, canceled: true };
     return { ok: true, dir: result.filePaths[0] };
   });
+  ipcMain.handle('taskSpeed:get', (_event, args) => readTaskSpeedStats({
+    sessions: Array.isArray(args?.sessions) ? args.sessions.map(s => ({
+      client: s.client, sessionId: s.sessionId, title: String(s.title || '').slice(0, 180)
+    })) : []
+  }));
   ipcMain.handle('session:getDetail', (_event, args) => {
     const { client, sessionId, period, sessionCost } = args || {};
     return readSessionDetailForPlatform({ client, sessionId, period, sessionCost });
@@ -8683,6 +8690,35 @@ app.whenReady().then(() => {
       copilotLoginFlowId = '';
     }
     return { ok: true };
+  });
+  let windowResize = null;
+  ipcMain.on('window:resizeStart', (event, edge) => {
+    if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents
+      || floatingBubbleState.collapsed || !describeWindowBehavior(settings).resizable
+      || mainWindow.isMaximized()) return;
+    const bounds = mainWindow.getBounds();
+    if (!resizedWindowBounds(bounds, edge, { x: 0, y: 0 }, WINDOW_LIMITS)) return;
+    mainWindow.focus();
+    stopFloatingBubbleAutoCollapseTimer();
+    windowResize = { win: mainWindow, bounds, edge, cursor: screen.getCursorScreenPoint() };
+  });
+  ipcMain.on('window:resizeMove', (event) => {
+    if (!windowResize || windowResize.win.isDestroyed() || floatingBubbleState.collapsed
+      || event.sender !== windowResize.win.webContents) return;
+    const cursor = screen.getCursorScreenPoint();
+    const next = resizedWindowBounds(windowResize.bounds, windowResize.edge, {
+      x: cursor.x - windowResize.cursor.x, y: cursor.y - windowResize.cursor.y
+    }, WINDOW_LIMITS);
+    windowResize.win.setBounds(next);
+  });
+  ipcMain.on('window:resizeEnd', (event) => {
+    if (!windowResize || event.sender !== windowResize.win.webContents) return;
+    const win = windowResize.win;
+    windowResize = null;
+    if (win.isDestroyed() || floatingBubbleState.collapsed) return;
+    const bounds = win.getBounds();
+    floatingBubbleState.expandedBounds = bounds;
+    persistWindowBounds(bounds);
   });
   ipcMain.on('window:minimize', (event) => {
     if (settings?.trayMode) {
