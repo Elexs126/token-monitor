@@ -104,6 +104,33 @@ test('task-history and custom-resize IPC stay Linux-only on both sides of the br
   }
 });
 
+test('task-history IPC normalizes session fields and bounds IDs before the reader', () => {
+  let handler;
+  let forwarded;
+  const block = main.match(/(?: {2}if \(process\.platform === 'linux'\) \{\n)? +ipcMain\.handle\('taskSpeed:get'[^]*?(?= {2}ipcMain\.handle\('session:getDetail')/)[0];
+  vm.runInNewContext(block, { process: { platform: 'linux' },
+    ipcMain: { handle: (_channel, callback) => { handler = callback; } },
+    readTaskSpeedStats: args => { forwarded = args; }
+  });
+  const sessions = [null, 7, { client: 123, sessionId: 42 },
+    { client: 'codex', sessionId: 'a'.repeat(300), title: 'b'.repeat(300) },
+    { client: 'antigravity', sessionId: 'ordinary-id', title: 'ordinary-title' }];
+  handler({}, { sessions });
+  assert.deepEqual(JSON.parse(JSON.stringify(forwarded.sessions)), [
+    { client: '', sessionId: '', title: '' },
+    { client: '', sessionId: '', title: '' },
+    { client: '123', sessionId: '42', title: '' },
+    { client: 'codex', sessionId: 'a'.repeat(200), title: 'b'.repeat(180) },
+    { client: 'antigravity', sessionId: 'ordinary-id', title: 'ordinary-title' }
+  ]);
+  for (const args of [undefined, {}, { sessions: null }]) {
+    handler({}, args);
+    assert.equal(forwarded.sessions.length, 0);
+  }
+  handler({}, { sessions: Array(2001).fill(sessions[4]) });
+  assert.equal(forwarded.sessions.length, 2000);
+});
+
 test('only Linux offers the Task speeds view in settings and navigation', () => {
   for (const platform of ['linux', 'darwin', 'win32']) {
     const context = { process: { platform }, isLinux: platform === 'linux', baseBreakdownOrder: ['tool', 'device', 'model', 'project', 'session'] };

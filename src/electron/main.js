@@ -7800,7 +7800,7 @@ app.whenReady().then(() => {
   if (process.platform === 'linux') {
     ipcMain.handle('taskSpeed:get', (_event, args) => readTaskSpeedStats({
       sessions: Array.isArray(args?.sessions) ? args.sessions.slice(0, 2000).map(s => ({
-        client: s?.client, sessionId: s?.sessionId, title: String(s?.title || '').slice(0, 180)
+        client: String(s?.client || ''), sessionId: String(s?.sessionId || '').slice(0, 200), title: String(s?.title || '').slice(0, 180)
       })) : []
     }));
   }
