@@ -105,12 +105,13 @@ test('the timing map reuses unchanged scans and refreshes after database or WAL 
   read();
   assert.equal(scans, 2);
   const writer = new DatabaseSync(database);
-  writer.exec('PRAGMA journal_mode=WAL; UPDATE thread_turns SET duration_ms=6000');
-  t.after(() => writer.close());
-  read();
-  assert.equal(scans, 3);
-  read();
-  assert.equal(scans, 3);
+  try {
+    writer.exec('PRAGMA journal_mode=WAL; UPDATE thread_turns SET duration_ms=6000');
+    read();
+    assert.equal(scans, 3);
+    read();
+    assert.equal(scans, 3);
+  } finally { writer.close(); }
 });
 
 test('one user task includes all model requests, ignores duplicate usage, and uses its real execution duration', () => {
