@@ -13,6 +13,20 @@ const {
   translate
 } = require('../../src/electron/renderer/i18n');
 
+test('task statistics labels are translated in every supported language', () => {
+  const keys = Object.keys(MESSAGES.en).filter(key => key.startsWith('taskSpeed.') || key === 'views.taskSpeed');
+  for (const { value: locale } of LANGUAGE_OPTIONS) {
+    if (locale === 'auto' || locale === 'en') continue;
+    for (const key of keys) {
+      assert.ok(MESSAGES[locale][key], `${locale}: ${key}`);
+      assert.notEqual(MESSAGES[locale][key], MESSAGES.en[key], `${locale}: ${key}`);
+    }
+  }
+  assert.equal(translate('zh-TW', 'taskSpeed.currentTask'), '本輪任務');
+  assert.equal(translate('ko', 'taskSpeed.currentTask'), '현재 작업');
+  assert.equal(translate('ja', 'taskSpeed.currentTask'), '今回のタスク');
+});
+
 function fakeElement(dataset = {}) {
   const attributes = {};
   return {
@@ -198,7 +212,7 @@ test('tray limit labels describe remaining quota instead of ambiguous worst wind
 });
 
 test('live rate tray labels are translated in every bundled locale', () => {
-  for (const locale of ['en', 'zh-TW', 'zh-CN', 'ko', 'ja']) {
+  for (const locale of ['en', 'zh-TW', 'zh-CN', 'ko', 'ja', 'pt-BR']) {
     assert.notEqual(translate(locale, 'settings.tray.liveTokenRate'), 'settings.tray.liveTokenRate');
     assert.notEqual(translate(locale, 'trayMenu.content.liveTokenRate'), 'trayMenu.content.liveTokenRate');
   }

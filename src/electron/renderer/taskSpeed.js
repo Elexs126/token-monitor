@@ -102,7 +102,10 @@
     async function refresh(force = false) {
       if (!visible() || busy || !force && Date.now() - lastFetch < 5000) return;
       const sessions = getSessions();
-      if (!sessions.length) return;
+      if (!sessions.length) {
+        if (!data) { data = { sessions: [], overall: null }; error = false; draw(); }
+        return;
+      }
       busy = true;
       lastFetch = Date.now();
       try { data = await fetchStats({ sessions }); error = false; }

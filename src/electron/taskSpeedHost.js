@@ -6,34 +6,45 @@ const pending = new Map();
 
 function readTaskSpeedStats(args) {
   if (!worker) {
-    worker = new Worker(require.resolve('../shared/taskSpeedWorker'));
-    worker.unref();
-    worker.on('message', ({ id, result, error }) => {
+    const instance = new Worker(require.resolve('../shared/taskSpeedWorker'));
+    worker = instance;
+    instance.unref();
+    let stopped = false;
+    const fail = error => {
+      if (stopped) return;
+      stopped = true;
+      for (const [id, request] of pending) {
+        if (request.worker !== instance) continue;
+        clearTimeout(request.timer);
+        pending.delete(id);
+        request.reject(error);
+      }
+      if (worker === instance) worker = null;
+    };
+    instance.fail = fail;
+    instance.on('message', ({ id, result, error }) => {
       const request = pending.get(id);
-      if (!request) return;
+      if (!request || request.worker !== instance) return;
       pending.delete(id);
       clearTimeout(request.timer);
       if (error) request.reject(new Error(error)); else request.resolve(result);
     });
-    worker.on('error', error => {
-      for (const request of pending.values()) { clearTimeout(request.timer); request.reject(error); }
-      pending.clear();
-      worker = null;
-    });
-    worker.on('exit', () => {
-      for (const request of pending.values()) { clearTimeout(request.timer); request.reject(new Error('Task reader stopped')); }
-      pending.clear();
-      worker = null;
-    });
+    instance.on('error', fail);
+    instance.on('exit', () => fail(new Error('Task reader stopped')));
   }
+  const instance = worker;
   return new Promise((resolve, reject) => {
     const id = ++sequence;
     const timer = setTimeout(() => {
-      pending.delete(id);
-      reject(new Error('Task speed data timed out'));
+      instance.fail(new Error('Task speed data timed out'));
+      void instance.terminate().catch(() => {});
     }, 60000);
-    pending.set(id, { resolve, reject, timer });
-    worker.postMessage({ id, args });
+    pending.set(id, { resolve, reject, timer, worker: instance });
+    try { instance.postMessage({ id, args }); }
+    catch (error) {
+      instance.fail(error);
+      void instance.terminate().catch(() => {});
+    }
   });
 }
 module.exports = { readTaskSpeedStats };

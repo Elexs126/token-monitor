@@ -112,6 +112,11 @@
       : { ...item, usageScope };
   }
 
+  function liveRateModePatch(source, rateMode) {
+    return { rateMode, ...(source.rateMode === 'task' && rateMode !== 'task'
+      ? { rateScope: source.previousRateScope || 'device', rateClient: '' } : {}) };
+  }
+
   function accountModeSourcePatch(source, accounts, accountMode) {
     if (accountMode !== 'specific') {
       return { accountMode, accountKey: '', window: source.window };
@@ -699,7 +704,7 @@
             { value: 'burn', label: l('trayComposer.rateMode.burn', 'Token burn (TPM)') }
           ],
           source.rateMode,
-          (rateMode) => updateItem(item, patch({ rateMode, ...(rateMode === 'task' ? { rateScope: 'device' } : {}) }))
+          (rateMode) => updateItem(item, patch(liveRateModePatch(source, rateMode)))
         ),
         picker(
           l('trayComposer.rateScope', 'Devices'),
@@ -1426,6 +1431,7 @@
   return {
     accountModeSourcePatch,
     costDisplayPatch,
+    liveRateModePatch,
     createTrayComposer,
     duplicateTrayLayoutItem,
     floatingBubbleBitmapHeight,

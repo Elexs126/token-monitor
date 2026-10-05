@@ -3,11 +3,12 @@
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { resolveSessionFile } = require('./sessionFiles');
+const { resolveSessionFile, findSessionFiles } = require('./sessionFiles');
 const { codexResponseItemPrompt } = require('./sessionDetail');
 const { protobufFields, readGenerations } = require('./providers/antigravity/throughput');
 const { DatabaseSync } = require('node:sqlite');
 const cache = new Map();
+let timingCache = { key: null, map: new Map() };
 const short = (value) => String(value || '').replace(/\s+/g, ' ').trim().slice(0, 180);
 const ms = (value) => typeof value === 'number' ? value * 1000 : Date.parse(value || '') || 0;
 
@@ -50,7 +51,7 @@ function parseCodexTasks(text) {
         delta = total >= output ? total - output : Number(last?.output_tokens) || 0;
         output = total;
       } else if (last) {
-        const signature = JSON.stringify(last);
+        const signature = JSON.stringify([task?.id, last]);
         if (signature !== lastUsage) delta = Number(last.output_tokens) || 0;
         lastUsage = signature;
       }
@@ -156,15 +157,19 @@ function summarize(tasks, now = Date.now()) {
 }
 
 function historyTimingMap(root) {
+  const file = path.join(root, 'thread_history_1.sqlite');
+  const key = JSON.stringify([file, stamp(file), stamp(`${file}-wal`)]);
+  if (timingCache.key === key) return timingCache.map;
   let db;
   const result = new Map();
   try {
-    db = new DatabaseSync(path.join(root, 'thread_history_1.sqlite'), { readOnly: true });
+    db = new DatabaseSync(file, { readOnly: true });
     for (const row of db.prepare('SELECT thread_id,turn_id,status,duration_ms FROM thread_turns').iterate()) {
       result.set(`${row.thread_id}:${row.turn_id}`, row);
     }
   } catch (_) {}
   finally { try { db?.close(); } catch (_) {} }
+  timingCache = { key, map: result };
   return result;
 }
 
@@ -176,7 +181,10 @@ function readTaskSpeedStats({ sessions = [], home = os.homedir(), codexRoot = pr
     const id = String(session.sessionId || '');
     if (!/^[\w-]+$/.test(id)) continue;
     let file = '';
-    if (session.client === 'codex') file = resolveSessionFile('codex', id, home) || '';
+    if (session.client === 'codex') {
+      file = resolveSessionFile('codex', id, home, { codexHome: codexRoot })
+        || findSessionFiles(path.join(codexRoot, 'archived_sessions'), [id]).get(id) || '';
+    }
     else {
       for (const root of ['antigravity-ide', 'antigravity', 'antigravity-backup']) {
         const candidate = path.join(home, '.gemini', root, 'conversations', `${id}.db`);
@@ -185,7 +193,7 @@ function readTaskSpeedStats({ sessions = [], home = os.homedir(), codexRoot = pr
     }
     const key = `${session.client}:${id}`;
     const fingerprint = file ? `${stamp(file)}|${stamp(`${file}-wal`)}`
-      : `${stamp(path.join(codexRoot, 'thread_history_1.sqlite-wal'))}`;
+      : `${stamp(path.join(codexRoot, 'thread_history_1.sqlite'))}|${stamp(path.join(codexRoot, 'thread_history_1.sqlite-wal'))}`;
     let cached = cache.get(key);
     if (!cached || cached.fingerprint !== fingerprint) {
       let tasks = [];

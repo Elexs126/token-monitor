@@ -148,6 +148,7 @@
     return {
       rateMode: mode,
       rateScope: client || mode === 'task' ? 'device' : normalizeLiveRateScope(input.rateScope),
+      ...(mode === 'task' ? { previousRateScope: normalizeLiveRateScope(input.previousRateScope ?? input.rateScope) } : {}),
       ...(client ? { rateClient: client } : {})
     };
   }
@@ -956,7 +957,7 @@
       const rawRate = sample && (mode !== 'task' || sample.idle !== true) ? sample[mode === 'task' ? 'speed' : mode] : null;
       const rate = rawRate === null || rawRate === undefined ? null : finite(rawRate);
       const value = rate === null ? '—' : mode === 'task'
-        ? Number(rate).toLocaleString(options.locale, { maximumFractionDigits: 1 })
+        ? rate > 0 && rate < 0.1 ? '<0.1' : Number(rate).toLocaleString(options.locale || options.language || 'en', { maximumFractionDigits: 1 })
         : formatLiveRate(rate, options);
       const text = `${value} ${mode === 'burn' ? 'TPM' : 'tok/s'}`;
       return {

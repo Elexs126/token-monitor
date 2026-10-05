@@ -1011,3 +1011,14 @@ test('task rates use task data and preserve the original live rate and idle valu
   assert.equal(items[1].available, true);
   assert.equal(resolveTrayLayout(layout, {}, { ...options, taskTokenRates: {} }).items[1].text, '— tok/s');
 });
+
+test('task rates keep small positive values visible and use the selected language', () => {
+  const layout = { version: 3, items: [{ ...createTrayLayoutItem('liveTokenRate'), rateMode: 'task' }] };
+  const render = (speed, options = {}) => resolveTrayLayout(layout, {}, {
+    ...options, taskTokenRates: { device: { speed, idle: false } }
+  }).items[0].text;
+  assert.equal(render(0.01), '<0.1 tok/s');
+  assert.equal(render(0), '0 tok/s');
+  assert.equal(render(1234.5, { language: 'de' }), '1.234,5 tok/s');
+  assert.equal(render(1234.5, { locale: 'en', language: 'de' }), '1,234.5 tok/s');
+});

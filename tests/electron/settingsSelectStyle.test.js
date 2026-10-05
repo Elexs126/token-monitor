@@ -27,7 +27,7 @@ test('Linux and Windows selects keep the glass control and readable popup colors
   );
   assert.match(
     css,
-    /select option,\s*select optgroup\s*\{[^}]*background-color:\s*rgb\(var\(--panel-rgb\)\);[^}]*color:\s*var\(--text\);/s,
+    /^select option,\s*select optgroup\s*\{[^}]*background-color:\s*rgb\(var\(--panel-rgb\)\);[^}]*color:\s*var\(--text\);/ms,
     'Native popup options on Linux and Windows should have an explicit readable theme pair'
   );
 });
