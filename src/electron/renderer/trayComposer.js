@@ -183,6 +183,7 @@
     const {
       root,
       surface,
+      taskSpeedEnabled,
       layoutApi,
       getLayout,
       getStylePreview,
@@ -700,7 +701,7 @@
           l('trayComposer.rateMode', 'Rate'),
           [
             { value: 'speed', label: l('trayComposer.rateMode.speed', 'Generation speed (tok/s)') },
-            { value: 'task', label: l('trayComposer.rateMode.task', 'Current task speed (tok/s)') },
+            ...(taskSpeedEnabled ? [{ value: 'task', label: l('trayComposer.rateMode.task', 'Current task speed (tok/s)') }] : []),
             { value: 'burn', label: l('trayComposer.rateMode.burn', 'Token burn (TPM)') }
           ],
           source.rateMode,

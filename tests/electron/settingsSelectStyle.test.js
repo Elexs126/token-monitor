@@ -27,7 +27,13 @@ test('Linux and Windows selects keep the glass control and readable popup colors
   );
   assert.match(
     css,
-    /^select option,\s*select optgroup\s*\{[^}]*background-color:\s*rgb\(var\(--panel-rgb\)\);[^}]*color:\s*var\(--text\);/ms,
-    'Native popup options on Linux and Windows should have an explicit readable theme pair'
+    /^html\.is-linux select option,\s*html\.is-linux select optgroup\s*\{[^}]*background-color:\s*rgb\(var\(--panel-rgb\)\);[^}]*color:\s*var\(--text\);/ms,
+    'Linux popup options should have an explicit readable theme pair'
   );
+});
+
+test('the Linux popup fix preserves the upstream Windows rule and does not style macOS', () => {
+  assert.match(app, /document\.documentElement\.classList\.toggle\('is-linux', isLinux\)/);
+  assert.match(css, /^html\.is-windows \.settings-panel select option\s*\{[^}]*background-color:\s*rgb\(var\(--panel-rgb\)\);[^}]*color:\s*var\(--text\);/ms);
+  assert.doesNotMatch(css, /^select (?:option|optgroup)/m);
 });

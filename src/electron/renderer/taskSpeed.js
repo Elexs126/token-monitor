@@ -23,12 +23,13 @@
         : `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
     };
     function choose(key) { selected = key; scope = 'session'; draw(); }
-    function rowNode(title, subtitle, value, callback) {
+    function rowNode(title, subtitle, value, callback, focusKey) {
       const row = el('div', 'detail-exchange task-speed-row');
       const label = el('div', 'detail-ex-label');
       label.append(el('span', 'detail-ex-title', title), el('span', 'detail-ex-sub', subtitle));
       row.append(label, el('span', 'detail-ex-value', speed(value)));
       if (callback) {
+        row.dataset.taskSpeedFocus = focusKey;
         row.tabIndex = 0;
         row.setAttribute('role', 'button');
         row.addEventListener('click', callback);
@@ -38,11 +39,22 @@
     }
     function draw() {
       if (!visible() || container.contains(document.activeElement) && document.activeElement.tagName === 'SELECT') return;
+      const focusKey = container.contains(document.activeElement) ? document.activeElement.dataset.taskSpeedFocus : '';
+      drawContents();
+      if (focusKey) {
+        const controls = [...container.querySelectorAll('[data-task-speed-focus]')];
+        const target = controls.find(node => node.dataset.taskSpeedFocus === focusKey)
+          || controls.find(node => node.dataset.taskSpeedFocus === `scope:${scope}`);
+        target?.focus({ preventScroll: true });
+      }
+    }
+    function drawContents() {
       container.replaceChildren();
       const tabs = el('div', 'task-speed-tabs');
       for (const [id, key] of [['task', 'currentTask'], ['session', 'currentSession'], ['all', 'allSessions']]) {
         const button = el('button', `task-speed-tab${scope === id ? ' is-active' : ''}`, t(`taskSpeed.${key}`));
         button.type = 'button';
+        button.dataset.taskSpeedFocus = `scope:${id}`;
         button.setAttribute('aria-pressed', String(scope === id));
         button.addEventListener('click', () => { scope = id; draw(); });
         tabs.append(button);
@@ -88,7 +100,7 @@
       if (scope === 'all') {
         for (const entry of sessions) list.append(rowNode(entry.title || t('taskSpeed.untitled'),
           `${entry.client === 'codex' ? 'Codex' : 'Antigravity'} · ${entry.taskCount > 0 ? `${entry.taskCount} ${t('taskSpeed.tasks')}` : t('detailNotFound')}`,
-          entry.speed, () => choose(entry.key)));
+          entry.speed, () => choose(entry.key), `session:${entry.key}`));
       } else {
         for (const [index, task] of (scope === 'task' ? current ? [current] : [] : tasks).entries()) {
           const date = task.startedAt ? new Date(task.startedAt).toLocaleString(undefined, { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';

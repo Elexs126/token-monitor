@@ -56,6 +56,42 @@ test('the public reader includes archived sessions and counts repeated or forked
   assert.equal(result.overall.speed, 15);
 });
 
+test('each refresh scans each fallback root once, including cached, missing and archived sessions', t => {
+  const roots = fixture(t);
+  rollout(roots.codexRoot, 'rollout-2026-10-04T10-00-00-direct', { turnId: 'direct', output: 10 });
+  rollout(roots.codexRoot, 'live', { turnId: 'live', output: 20 });
+  rollout(roots.codexRoot, 'live', { turnId: 'wrong-archive', output: 900, archived: true });
+  rollout(roots.codexRoot, 'archive', { turnId: 'archive', output: 30, archived: true });
+  const reads = new Map();
+  const countedFs = { ...fs, readdirSync(dir, options) {
+    reads.set(dir, (reads.get(dir) || 0) + 1);
+    return fs.readdirSync(dir, options);
+  } };
+  const sessionFile = require.resolve('../../src/shared/sessionFiles');
+  const sessionModule = { exports: {} };
+  const sessionRequire = createRequire(sessionFile);
+  vm.runInNewContext(fs.readFileSync(sessionFile, 'utf8'), {
+    module: sessionModule, process, require: id => id === 'node:fs' ? countedFs : sessionRequire(id)
+  });
+  const file = require.resolve('../../src/shared/taskSpeed');
+  const nativeRequire = createRequire(file);
+  const module = { exports: {} };
+  vm.runInNewContext(fs.readFileSync(file, 'utf8'), { module, Buffer, process,
+    require: id => id === './sessionFiles' ? sessionModule.exports : nativeRequire(id) });
+  const sessions = ['rollout-2026-10-04T10-00-00-direct', 'live', 'archive',
+    ...Array.from({ length: 100 }, (_, i) => `missing-${i}`), '../unsafe'].map(sessionId => ({ client: 'codex', sessionId }));
+  for (let refresh = 0; refresh < 2; refresh++) {
+    reads.clear();
+    const result = module.exports.readTaskSpeedStats({ ...roots, sessions });
+    assert.equal(result.sessions.length, 103);
+    assert.deepEqual(Array.from(result.sessions.slice(0, 3), session => session.outputTokens), [10, 20, 30]);
+    assert.equal(result.overall.outputTokens, 60);
+    for (const root of ['sessions', 'archived_sessions']) {
+      assert.equal(reads.get(path.join(roots.codexRoot, root)), 1, `${root}: one walk on refresh ${refresh}`);
+    }
+  }
+});
+
 function historyDb(root) {
   const db = new DatabaseSync(path.join(root, 'thread_history_1.sqlite'));
   db.exec(`CREATE TABLE thread_turns (thread_id TEXT, turn_id TEXT, started_at TEXT, duration_ms INTEGER,

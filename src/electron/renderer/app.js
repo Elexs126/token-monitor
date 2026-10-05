@@ -1,5 +1,7 @@
 'use strict';
 
+const isLinux = navigator.userAgent.toLowerCase().includes('linux');
+
 // Client identity — ids, labels and display order — comes from the shared
 // catalog (loaded as a script before this file). Destructured to the bare
 // names the call sites below already use.
@@ -248,13 +250,13 @@ const VIEW_DISPLAY_OPTIONS = [
   { id: 'model', labelKey: 'views.model' },
   { id: 'project', labelKey: 'views.project' },
   { id: 'session', labelKey: 'views.session' },
-  { id: 'speed', labelKey: 'views.taskSpeed' },
+  ...(isLinux ? [{ id: 'speed', labelKey: 'views.taskSpeed' }] : []),
   { id: 'device', labelKey: 'views.device' },
   { id: 'trends', labelKey: 'views.trends' },
   { id: 'status', labelKey: 'views.status' }
 ];
 const viewPeriodValues = new Set(['today', 'month', 'week', 'last7', 'last30', 'allTime']);
-const viewBreakdownValues = new Set(['home', ...baseBreakdownOrder, 'status', 'limits', 'trends', 'speed']);
+const viewBreakdownValues = new Set(['home', ...baseBreakdownOrder, 'status', 'limits', 'trends', ...(isLinux ? ['speed'] : [])]);
 const HOME_MODULE_OPTIONS = [
   { id: 'limits', labelKey: 'home.limits', viewId: 'limits' },
   { id: 'tool', labelKey: 'home.tools', viewId: 'tool' },
@@ -2872,7 +2874,7 @@ function effectiveViewDisplayOrderValue() {
 }
 
 function availableBreakdownIds() {
-  const order = ['home', 'speed', baseBreakdownOrder[0], 'status', 'trends', ...baseBreakdownOrder.slice(1)];
+  const order = ['home', ...(isLinux ? ['speed'] : []), baseBreakdownOrder[0], 'status', 'trends', ...baseBreakdownOrder.slice(1)];
   let available = state.settings?.historyEnabled === false ? order.filter((id) => id !== 'trends') : order;
   if (state.settings?.projectsEnabled === false) available = available.filter((id) => id !== 'project');
   return limitViewAvailable() ? [...available, 'limits'] : available;
@@ -6502,7 +6504,13 @@ function taskSpeedSessions() {
   }
   return [...sessions.values()]
     .filter(session => ['codex', 'antigravity'].includes(session.client) && !/review/i.test(session.sessionKind || ''))
-    .sort((a, b) => Date.parse(b.lastUsedAt || '') - Date.parse(a.lastUsedAt || ''))
+    .sort((a, b) => {
+      const aTime = Date.parse(a.lastUsedAt || '');
+      const bTime = Date.parse(b.lastUsedAt || '');
+      if (Number.isNaN(aTime)) return Number.isNaN(bTime) ? 0 : 1;
+      if (Number.isNaN(bTime)) return -1;
+      return bTime - aTime;
+    })
     .map(session => ({ client: session.client, sessionId: session.sessionId, title: session.title
       || [Object.keys(session.models || {})[0], session.lastUsedAt ? new Date(session.lastUsedAt).toLocaleString() : '', session.sessionId.slice(-6)].filter(Boolean).join(' · ') }));
 }
@@ -6535,7 +6543,7 @@ function taskTokenRateSamples() {
 }
 
 function taskTokenRateDisplaysNeeded() {
-  return displayLiveTokenRateItems().some(item => item.rateMode === 'task');
+  return isLinux && displayLiveTokenRateItems().some(item => item.rateMode === 'task');
 }
 
 function refreshTaskTokenRateDisplays() {
@@ -6579,6 +6587,10 @@ function render() {
   els.shell.classList.toggle('task-speed-mode', state.breakdown === 'speed');
   els.taskSpeedPanel.classList.toggle('hidden', state.breakdown !== 'speed');
   if (state.breakdown === 'speed') {
+    els.shell.classList.toggle('session-mode', false);
+    els.shell.classList.toggle('home-mode', false);
+    els.viewBackRow?.classList.toggle('hidden', !state.homeReturnVisible);
+    hideHomeActivityTooltip();
     for (const panel of [els.homePanel, els.breakdown, els.serviceStatusPanel, els.trendsPanel,
       els.limitsPanel, els.sessionDetail, els.sessionDetailHead, els.fixedPeriodMessage, els.sessionPagerHost]) panel?.classList.add('hidden');
     renderTaskSpeed();
@@ -7081,6 +7093,7 @@ function applyAppearanceSettings(settings) {
   document.body.classList.remove('is-windows-glass');
   
   document.documentElement.classList.toggle('is-windows', isWindows);
+  document.documentElement.classList.toggle('is-linux', isLinux);
   document.body.classList.toggle('is-windows', isWindows);
   
   document.documentElement.classList.toggle('is-mac-legacy', isMacLegacyRadius);
@@ -7624,7 +7637,7 @@ function renderFloatingBubbleContent() {
       ? trayDataUrlForMode(mode, bitmapHeight, floatingBubbleGeneratedColors(), {
           contentOnly: mode === 'barsAllSessions' || mode === 'limitsAllSessions',
           providerContrastHalo: true,
-          taskSpeedWhite: true,
+          taskSpeedWhite: isLinux,
           showProviderBadge: false,
           layout: mode === 'custom' ? state.settings?.floatingBubbleCustomLayout : undefined
         })
@@ -13988,7 +14001,7 @@ function trayComposerPreview(surface) {
         layout: state.settings?.[layoutKey],
         contentOnly: mode === 'barsAllSessions' || mode === 'limitsAllSessions',
         providerContrastHalo: true,
-        taskSpeedWhite: true,
+        taskSpeedWhite: isLinux,
         showProviderBadge: false
       })
     };
@@ -14024,6 +14037,7 @@ function createTrayComposer(surface) {
   return window.TokenMonitorTrayComposer.createTrayComposer({
     root,
     surface,
+    taskSpeedEnabled: isLinux,
     layoutApi: trayLayoutApi,
     getLayout: () => state.settings?.[layoutKey],
     getStylePreview: (style) => renderTrayComposerItem(
@@ -14034,11 +14048,11 @@ function createTrayComposer(surface) {
       }
     ),
     getFontStylePreview: (item, fontStyle) => renderTrayComposerFontPreview(item, fontStyle, {
-      taskSpeedWhite: !isTray,
+      taskSpeedWhite: isLinux && !isTray,
       showProviderBadge: isTray && state.settings?.showTrayProviderBadge === true
     }),
     renderItem: (item) => renderTrayComposerItem(item, {
-      taskSpeedWhite: !isTray,
+      taskSpeedWhite: isLinux && !isTray,
       showProviderBadge: isTray && state.settings?.showTrayProviderBadge === true
     }),
     getPreview: () => trayComposerPreview(surface),
@@ -17262,28 +17276,31 @@ init();
 
 // Transparent frameless windows have no reliable native resize border on X11.
 // Keep pointer capture while the window moves; main uses the OS cursor in DIP.
-for (const edge of ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw']) {
-  const handle = document.createElement('div');
-  handle.className = `window-resize-handle resize-${edge}`;
-  handle.title = document.documentElement.lang.startsWith('zh') ? '拖动调整窗口大小' : 'Drag to resize';
-  handle.addEventListener('pointerdown', event => {
-    if (event.button !== 0 || state.floatingBubble.collapsed || state.settings?.windowBehavior === 'desktop') return;
-    event.preventDefault();
-    event.stopPropagation();
-    handle.setPointerCapture(event.pointerId);
-    window.tokenMonitor.startWindowResize(edge);
-  });
-  handle.addEventListener('pointermove', event => {
-    if (handle.hasPointerCapture(event.pointerId)) window.tokenMonitor.moveWindowResize();
-  });
-  const finish = event => {
-    if (!handle.hasPointerCapture(event.pointerId)) return;
-    handle.releasePointerCapture(event.pointerId);
-    window.tokenMonitor.endWindowResize();
-  };
-  handle.addEventListener('pointerup', finish);
-  handle.addEventListener('pointercancel', finish);
-  handle.addEventListener('lostpointercapture', () => window.tokenMonitor.endWindowResize());
-  document.body.append(handle);
+if (isLinux) {
+  for (const edge of ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw']) {
+    const handle = document.createElement('div');
+    handle.className = `window-resize-handle resize-${edge}`;
+    handle.dataset.i18nTitle = 'window.resizeHandle';
+    handle.title = t('window.resizeHandle');
+    handle.addEventListener('pointerdown', event => {
+      if (event.button !== 0 || state.floatingBubble.collapsed || state.settings?.windowBehavior === 'desktop') return;
+      event.preventDefault();
+      event.stopPropagation();
+      handle.setPointerCapture(event.pointerId);
+      window.tokenMonitor.startWindowResize(edge);
+    });
+    handle.addEventListener('pointermove', event => {
+      if (handle.hasPointerCapture(event.pointerId)) window.tokenMonitor.moveWindowResize();
+    });
+    const finish = event => {
+      if (!handle.hasPointerCapture(event.pointerId)) return;
+      handle.releasePointerCapture(event.pointerId);
+      window.tokenMonitor.endWindowResize();
+    };
+    handle.addEventListener('pointerup', finish);
+    handle.addEventListener('pointercancel', finish);
+    handle.addEventListener('lostpointercapture', () => window.tokenMonitor.endWindowResize());
+    document.body.append(handle);
+  }
+  window.addEventListener('blur', () => window.tokenMonitor.endWindowResize());
 }
-window.addEventListener('blur', () => window.tokenMonitor.endWindowResize());

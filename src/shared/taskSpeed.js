@@ -3,7 +3,7 @@
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { resolveSessionFile, findSessionFiles } = require('./sessionFiles');
+const { codexSessionFile, findSessionFiles } = require('./sessionFiles');
 const { codexResponseItemPrompt } = require('./sessionDetail');
 const { protobufFields, readGenerations } = require('./providers/antigravity/throughput');
 const { DatabaseSync } = require('node:sqlite');
@@ -176,14 +176,26 @@ function historyTimingMap(root) {
 function readTaskSpeedStats({ sessions = [], home = os.homedir(), codexRoot = process.env.CODEX_HOME || path.join(home, '.codex') } = {}) {
   const results = [];
   const timings = historyTimingMap(codexRoot);
-  for (const session of sessions.slice(0, 2000)) {
+  const selected = sessions.slice(0, 2000);
+  const directFiles = new Map();
+  const fallbackIds = [];
+  for (const session of selected) {
+    if (session?.client !== 'codex') continue;
+    const id = String(session.sessionId || '');
+    if (!/^[\w-]+$/.test(id)) continue;
+    const direct = codexSessionFile(home, id, { codexHome: codexRoot });
+    if (direct) directFiles.set(id, direct);
+    else fallbackIds.push(id);
+  }
+  const liveFiles = findSessionFiles(path.join(codexRoot, 'sessions'), fallbackIds);
+  const archivedFiles = findSessionFiles(path.join(codexRoot, 'archived_sessions'), fallbackIds.filter(id => !liveFiles.has(id)));
+  for (const session of selected) {
     if (!['codex', 'antigravity'].includes(session.client)) continue;
     const id = String(session.sessionId || '');
     if (!/^[\w-]+$/.test(id)) continue;
     let file = '';
     if (session.client === 'codex') {
-      file = resolveSessionFile('codex', id, home, { codexHome: codexRoot })
-        || findSessionFiles(path.join(codexRoot, 'archived_sessions'), [id]).get(id) || '';
+      file = directFiles.get(id) || liveFiles.get(id) || archivedFiles.get(id) || '';
     }
     else {
       for (const root of ['antigravity-ide', 'antigravity', 'antigravity-backup']) {

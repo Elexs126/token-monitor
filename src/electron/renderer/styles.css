@@ -3119,11 +3119,18 @@ button.settings-help-trigger:focus-visible { outline: 1px solid var(--accent); o
   .sync-content-dialog,
   .settings-help-popover { background: rgb(var(--glass-rgb)); }
 }
-/* Native select popups can use a light system background while inheriting
-   the widget's light text on Linux as well as Windows. Give every popup an
-   opaque themed surface, including dynamically created session pickers. */
-select option,
-select optgroup {
+/* Chromium delegates an open <select> popup to a platform-specific surface.
+   Windows can give that popup a light system background while retaining our
+   light text, so make only the popup options opaque. The closed control keeps
+   the same light glass treatment as macOS instead of reverting to a heavy
+   native field. */
+html.is-windows .settings-panel select option {
+  background-color: rgb(var(--panel-rgb));
+  color: var(--text);
+}
+/* Linux native popups need opaque colors, including dynamic session pickers. */
+html.is-linux select option,
+html.is-linux select optgroup {
   background-color: rgb(var(--panel-rgb));
   color: var(--text);
 }
